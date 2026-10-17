@@ -110,9 +110,39 @@ test('tactical choices have three decision nodes and can reverse a result', () =
   const defend = finishFight(shop, ['guard', 'peel', 'disengage']);
   assert.equal(attack.phase, 'report');
   assert.equal(defend.phase, 'report');
-  assert.notEqual(attack.lastRound.winner, defend.lastRound.winner);
   assert.notEqual(attack.lastRound.playerDamage, defend.lastRound.playerDamage);
+  assert.ok(Array.from({ length: 30 }, (_, index) => index + 1).some(seed => {
+    const candidate = toShop(seed);
+    return finishFight(candidate, ['backline', 'burst', 'chase']).lastRound.winner !==
+      finishFight(candidate, ['guard', 'peel', 'disengage']).lastRound.winner;
+  }), 'strategy should change the winner in at least one seeded matchup');
   assert.deepEqual(shop.player.itemIds, []);
+});
+
+test('enemy loadouts grow before battle and a no-shop defensive loop cannot guarantee a win', () => {
+  let game = toShop(42);
+  const first = startFight(game, db);
+  assert.ok(first.enemies.every(unit => unit.itemIds.length >= 1 && unit.augmentIds.length === 1));
+  assert.ok(first.enemies.every(unit => db.items.some(item => item.id === unit.itemIds[0] && item.category === 'legendary')));
+  game = first;
+  for (const choice of ['frontline', 'sustain', 'secure']) game = chooseTactic(game, choice, db);
+  game = advanceRound(game, db);
+  game = chooseAugment(game, game.augmentOffers[0].id, db);
+  const second = startFight(game, db);
+  assert.ok(second.enemies.every(unit => unit.itemIds.length >= 2 && unit.augmentIds.length === 2));
+  assert.ok(second.enemies.every(unit => unit.augmentIds.every(id => db.augments.some(card => card.id === id))));
+
+  let defensiveWins = 0;
+  for (let seed = 1; seed <= 80; seed++) {
+    let match = toShop(seed);
+    for (let round = 0; round < 4; round++) {
+      match = finishFight(match, ['guard', 'peel', 'disengage']);
+      match = advanceRound(match, db);
+      if (round < 3) match = chooseAugment(match, match.augmentOffers[0].id, db);
+    }
+    defensiveWins += Number(match.result.winner === 'ally');
+  }
+  assert.ok(defensiveWins < 48, `${defensiveWins}/80 no-shop defensive matches won`);
 });
 
 test('teamfight outcome, kills and assists produce an auditable next-round budget', () => {

@@ -172,6 +172,20 @@ img { max-width: 100%; }
 .battle-side .unit-card>span:nth-child(2) { min-width: 0; }
 .battle-side .unit-card b { display: block; white-space: nowrap; text-overflow: ellipsis; overflow: hidden; font-size: 9px; margin-top: 4px; }
 .battle-side .unit-card small { display: none; }
+.enemy-scout { margin-top: 10px; border: 1px solid #675660; background: #241f2b; color: #efd8d4; }
+.enemy-scout summary { display: flex; justify-content: space-between; align-items: center; gap: 12px; padding: 11px 14px; cursor: pointer; list-style: none; font-size: 11px; }
+.enemy-scout summary::-webkit-details-marker { display: none; }
+.enemy-scout summary::before { content: '▸'; color: #e9ac9e; font-size: 14px; }
+.enemy-scout[open] summary::before { content: '▾'; }
+.enemy-scout summary span { flex: 1; font-weight: 700; }
+.enemy-scout summary small { margin-left: 8px; color: #b89598; font-weight: 400; }
+.enemy-scout summary b { color: #f0b9a9; white-space: nowrap; }
+.enemy-scout-grid { display: grid; grid-template-columns: repeat(5, minmax(0, 1fr)); gap: 8px; padding: 0 12px 12px; }
+.enemy-scout-grid article { min-width: 0; padding: 10px; border: 1px solid #624d59; background: #352832; }
+.enemy-scout-grid strong, .enemy-scout-grid small, .enemy-scout-grid em { display: block; }
+.enemy-scout-grid strong { margin-bottom: 6px; color: #f5d7c9; font-size: 11px; }
+.enemy-scout-grid small { color: #c5adb3; font-size: 10px; line-height: 1.5; overflow-wrap: anywhere; }
+.enemy-scout-grid em { margin-top: 7px; color: #e8b7a2; font-size: 10px; font-style: normal; line-height: 1.5; overflow-wrap: anywhere; }
 .tactic-options { display: grid; grid-template-columns: repeat(5, minmax(0, 1fr)); gap: 9px; margin-top: 15px; }
 .tactic-card { min-height: 178px; display: flex; flex-direction: column; align-items: start; gap: 9px; padding: 14px; text-align: left; color: #e6f1ee; border: 1px solid #44616a; background: #1a313b; transition: transform .16s, border-color .16s, background .16s; }
 .tactic-card:hover { transform: translateY(-3px); border-color: #8bdfd0; background: #23434b; }
@@ -182,6 +196,8 @@ img { max-width: 100%; }
 .chosen-tactics { margin-top: 14px; display: flex; flex-wrap: wrap; align-items: center; gap: 8px; padding: 12px; color: #9db6ba; border: 1px solid #35535a; font-size: 10px; }
 .chosen-tactics b { color: #e6d4aa; }
 .chosen-tactics i { color: #75bfb3; font-style: normal; }
+@media (max-width: 850px) { .enemy-scout-grid { grid-template-columns: repeat(2, minmax(0, 1fr)); } }
+@media (max-width: 480px) { .enemy-scout summary { flex-wrap: wrap; } .enemy-scout summary small { display: block; margin: 3px 0 0; } .enemy-scout-grid { grid-template-columns: 1fr; } }
 
 .result-hero { padding: 19px 23px; border: 1px solid #7ac8ad; background: linear-gradient(120deg, #1f4643, #132c35); }
 .result-hero.lose { border-color: #bd777d; background: linear-gradient(120deg, #4b3038, #252834); }

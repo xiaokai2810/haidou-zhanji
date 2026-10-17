@@ -12,8 +12,27 @@ const BOT_ITEMS = {
   Fighter: ['3078', '3053', '3074', '6333'],
   Mage: ['6653', '3089', '3135', '3157'],
   Marksman: ['3046', '3031', '3153', '3036'],
-  Assassin: ['3142', '3147', '6696', '3036'],
+  Assassin: ['3142', '6676', '6696', '3036'],
   Support: ['6617', '2065', '3107', '3504'],
+};
+// Opponents draft role-fit powers each round. Combat gives these catalogue
+// cards small, explicit effects where the shared panel model has none.
+const BOT_AUGMENTS = {
+  Tank: ['divine_intervention', 'tank_it_or_leave_it', 'double_defense', 'courage_of_the_colossus'],
+  Fighter: ['giant_slayer', 'firebrand', 'critical_rhythm', 'double_tap'],
+  Mage: ['infernal_conduit', 'jeweled_gauntlet', 'firebrand', 'giant_slayer'],
+  Marksman: ['double_tap', 'firebrand', 'giant_slayer', 'critical_rhythm'],
+  Assassin: ['giant_slayer', 'firebrand', 'critical_rhythm', 'double_tap'],
+  Support: ['our_healing', 'critical_healing', 'divine_intervention', 'infernal_conduit'],
+};
+const BOT_AUGMENT_COMBAT = {
+  divine_intervention: { defense: .035 }, tank_it_or_leave_it: { defense: .02 },
+  double_defense: { defense: .025 }, courage_of_the_colossus: { defense: .04 },
+  our_healing: { receivedHealing: .04 }, critical_healing: { healing: .04 },
+  giant_slayer: { giantDamage: .05 },
+  firebrand: { attack: .025 }, critical_rhythm: { attack: .025 },
+  double_tap: { attack: .025 }, infernal_conduit: { attack: .025 },
+  jeweled_gauntlet: { attack: .04 },
 };
 const IMMEDIATE_AUGMENT_GOLD = {
   donation: 1750,
@@ -82,9 +101,15 @@ const byId = (rows, id) => rows.find(row => row.id === id);
 const roleOf = champion => champion.tags.find(tag => BOT_ITEMS[tag]) || 'Fighter';
 
 function seedNumber(seed) {
-  if (Number.isFinite(Number(seed))) return (Number(seed) >>> 0) || 0x6d2b79f5;
   let hash = 2166136261;
   for (const character of String(seed)) hash = Math.imul(hash ^ character.charCodeAt(0), 16777619);
+  // Mix even nearby numeric seeds before xorshift's first draw. Without this,
+  // seeds 1..300 repeatedly offer the same part of the champion pool.
+  hash ^= hash >>> 16;
+  hash = Math.imul(hash, 0x7feb352d);
+  hash ^= hash >>> 15;
+  hash = Math.imul(hash, 0x846ca68b);
+  hash ^= hash >>> 16;
   return (hash >>> 0) || 0x6d2b79f5;
 }
 
@@ -206,7 +231,9 @@ export function chooseHero(game, championId, db) {
   const next = clone(game);
   next.player = makeUnit(championId, db, LEVELS[0], 3500);
   const used = new Set([championId, ...next.allies.map(unit => unit.championId)]);
-  for (const role of ROLES) {
+  // Some drafts replace the enemy support with a backline-diving assassin.
+  const enemyRoles = random(next) < .4 ? [...ROLES.slice(0, 4), 'Assassin'] : ROLES;
+  for (const role of enemyRoles) {
     const enemy = drawRoleChampion(next, db, used, role);
     next.enemies.push(makeUnit(enemy.id, db, LEVELS[0]));
   }
@@ -322,6 +349,8 @@ export function startFight(game, db) {
   if (game.phase !== 'shop') throw new Error('选完海克斯并备战后才能开始团战');
   if (!game.player || !byId(db.champions, game.player.championId)) throw new Error('尚未选择英雄');
   const next = clone(game);
+  for (const unit of next.allies) botGear(unit, 'ally', next, db);
+  for (const unit of next.enemies) botGear(unit, 'enemy', next, db);
   next.phase = 'tactic';
   next.tacticStage = STAGES[0];
   next.pendingTactics = [];
@@ -334,11 +363,17 @@ const frontline = champion => champion.tags.some(tag => ['Tank', 'Fighter'].incl
 
 function botGear(unit, side, game, db) {
   const champion = byId(db.champions, unit.championId);
-  const plan = BOT_ITEMS[roleOf(champion)] || BOT_ITEMS.Fighter;
+  const role = roleOf(champion);
+  const plan = BOT_ITEMS[role] || BOT_ITEMS.Fighter;
   const extra = Math.floor(game.sideEconomy[side] / 2600);
   const count = clamp(game.round + extra, 0, 4);
   for (const id of plan.slice(0, count)) {
     if (byId(db.items, id) && !unit.itemIds.includes(id)) unit.itemIds.push(id);
+  }
+  if (side === 'enemy') {
+    for (const id of BOT_AUGMENTS[role].slice(0, game.round)) {
+      if (byId(db.augments, id) && !unit.augmentIds.includes(id)) unit.augmentIds.push(id);
+    }
   }
   syncUnit(unit, db, true);
 }
@@ -379,21 +414,21 @@ function tacticEffects(game, db) {
     case 'backline': effects.target = 'backline'; effects.backline *= 1.18; effects.extraRisk *= 1.10; break;
     case 'frontline': effects.target = 'frontline'; effects.frontline *= 1.12; effects.defense *= 1.04; break;
     case 'flank': effects.target = 'backline'; effects.backline *= 1.11; effects.teamAttack *= 1.05; effects.teamDefense *= .94; break;
-    case 'guard': effects.target = 'assassin'; effects.attack *= .96; effects.teamDefense *= 1.11; break;
+    case 'guard': effects.target = 'assassin'; effects.attack *= .96; effects.teamAttack *= .97; effects.teamDefense *= game.enemies.some(unit => byId(db.champions, unit.championId)?.tags.includes('Assassin')) ? 1.08 : 1.02; break;
     case 'steel': effects.target = 'frontline'; effects.attack *= .96; effects.steel *= 1.38; break;
   }
   switch (chosen.response) {
     case 'burst': effects.attack *= 1.15; effects.extraRisk *= 1.07; break;
     case 'kite': effects.attack *= ranged ? 1.03 : .91; effects.defense *= 1.10; break;
-    case 'peel': effects.attack *= .94; effects.teamDefense *= 1.12; break;
+    case 'peel': effects.attack *= .94; effects.teamAttack *= .96; effects.teamDefense *= 1.04; break;
     case 'sustain': effects.attack *= .97; effects.sustain += .07; effects.defense *= 1.04; break;
     case 'steel': effects.attack *= .98; effects.steel *= 1.34; effects.extraRisk *= 1.04; break;
   }
   switch (chosen.finish) {
     case 'chase': effects.attack *= 1.12; effects.extraRisk *= 1.10; break;
     case 'secure': effects.attack *= .98; effects.teamAttack *= 1.08; break;
-    case 'disengage': effects.attack *= .87; effects.teamDefense *= 1.16; effects.defense *= 1.10; break;
-    case 'counter': effects.attack *= 1.04; effects.teamDefense *= 1.05; effects.target = 'assassin'; break;
+    case 'disengage': effects.attack *= .85; effects.teamAttack *= .88; effects.teamDefense *= 1.04; effects.defense *= 1.07; break;
+    case 'counter': effects.attack *= game.enemies.some(unit => byId(db.champions, unit.championId)?.tags.includes('Assassin')) ? 1.08 : 1.01; effects.teamDefense *= 1.02; effects.target = 'assassin'; break;
     case 'steel': effects.attack *= .94; effects.steel *= 1.30; break;
   }
   return effects;
@@ -428,7 +463,12 @@ function simulateBattle(game, db) {
   const enemies = game.enemies.map(unit => {
     const champion = byId(db.champions, unit.championId);
     const panel = panelFor(unit, db);
-    return { champion, panel, hp: panel.stats.hp, maxHp: panel.stats.hp, damage: 0, kills: 0 };
+    const combat = unit.augmentIds.reduce((total, id) => {
+      const effect = BOT_AUGMENT_COMBAT[id];
+      if (effect) for (const key of ['attack', 'defense', 'healing', 'receivedHealing', 'giantDamage']) total[key] += effect[key] || 0;
+      return total;
+    }, { attack: 0, defense: 0, healing: 0, receivedHealing: 0, giantDamage: 0 });
+    return { champion, panel, combat, hp: panel.stats.hp, maxHp: panel.stats.hp, damage: 0, kills: 0 };
   });
   let steelHits = 0;
   let elapsed = 0;
@@ -455,9 +495,12 @@ function simulateBattle(game, db) {
           }
         } else if (friendly) hit *= effects.teamAttack;
         else {
+          const giantFactor = target.maxHp >= attacker.maxHp * 1.15 || target.champion.tags.includes('Tank') ? 1 : .3;
+          hit *= 1 + (attacker.combat?.attack || 0) + (attacker.combat?.giantDamage || 0) * giantFactor;
           if (targetIndex === 0) hit *= effects.extraRisk / effects.defense;
           else hit /= effects.teamDefense;
         }
+        if (friendly) hit /= 1 + (target.combat?.defense || 0);
         pending[targetIndex] += hit;
         attacker.damage += hit;
         if (!killers[targetIndex] || hit > killers[targetIndex].hit) killers[targetIndex] = { index, hit };
@@ -485,7 +528,8 @@ function simulateBattle(game, db) {
       const support = living.find(unit => unit.champion.tags.includes('Support'));
       if (!support || !living.length) continue;
       const patient = living.reduce((a, b) => a.hp / a.maxHp < b.hp / b.maxHp ? a : b);
-      patient.hp = Math.min(patient.maxHp, patient.hp + (20 + support.panel.stats.ap * .06) * (friendly ? effects.teamDefense : 1));
+      const healing = (20 + support.panel.stats.ap * .06) * (friendly ? effects.teamDefense : 1 + (support.combat?.healing || 0));
+      patient.hp = Math.min(patient.maxHp, patient.hp + healing * (1 + (patient.combat?.receivedHealing || 0)));
     }
     elapsed += .5;
   }
@@ -607,7 +651,9 @@ function resolveFight(game, db) {
   });
   applyGrowth(game, round, db);
   game.player.gold += round.economy.total;
-  game.sideEconomy[round.winner] += 1450 + (round.winner === 'ally' ? round.allyKills : round.enemyKills) * 120;
+  game.sideEconomy.ally += 1300;
+  game.sideEconomy.enemy += 1300;
+  game.sideEconomy[round.winner] += 650 + (round.winner === 'ally' ? round.allyKills : round.enemyKills) * 80;
   game.log.push({ kind: 'combat', round: game.round, text: `第 ${game.round} 场${round.winner === 'ally' ? '我方获胜' : '敌方获胜'}；你击倒 ${round.playerKills} 人、助攻 ${round.playerAssists} 次。` });
   game.log.push({ kind: 'economy', round: game.round, text: `本轮收入 ${round.economy.total} 金币：基础 ${round.economy.base} + ${round.winner === 'ally' ? '胜利' : '失利'} ${round.economy.winBonus} + 击杀 ${round.economy.killBonus} + 助攻 ${round.economy.assistBonus}。` });
   for (const event of round.events.slice(0, 5)) game.log.push({ kind: 'event', round: game.round, text: event });
