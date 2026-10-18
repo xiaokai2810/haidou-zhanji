@@ -4,7 +4,8 @@ import { readFileSync } from 'node:fs';
 import {
   createStandaloneGame, swapHeroFromBench, chooseHero, rerollAugments,
   chooseAugment, buyItem, sellItem, getSynergies, startFight,
-  chooseTactic, advanceRound, TACTIC_OPTIONS,
+  choosePriorityTarget, chooseTactic, chooseObjective, advanceRound,
+  TACTIC_OPTIONS, OBJECTIVE_OPTIONS, getObjectiveOptions,
 } from '../src/standalone-engine.js';
 
 const read = name => JSON.parse(readFileSync(new URL(`../public/data/${name}.json`, import.meta.url)));
@@ -15,10 +16,11 @@ const toShop = (seed = 103) => {
   game = chooseHero(game, game.heroOffers[0].id, db);
   return chooseAugment(game, game.augmentOffers[0].id, db);
 };
-const finishFight = (game, choices, catalogue = db) => {
+const finishFight = (game, choices, catalogue = db, { targetId, objectiveId = 'farm_wave' } = {}) => {
   let current = startFight(game, catalogue);
+  current = choosePriorityTarget(current, targetId || current.enemies[0].championId, catalogue);
   for (const choice of choices) current = chooseTactic(current, choice, catalogue);
-  return current;
+  return chooseObjective(current, objectiveId, catalogue);
 };
 
 test('seeded hero cards, shared bench exchange, and 5v5 matchmaking are reproducible', () => {
@@ -99,11 +101,15 @@ test('components discount direct recipes, duplicate recipe inputs are consumed, 
 test('tactical choices have three decision nodes and can reverse a result', () => {
   const shop = toShop(103);
   const a = startFight(shop, db);
-  assert.equal(a.phase, 'tactic');
-  assert.equal(a.tacticStage, 'engage');
-  assert.ok(Object.values(TACTIC_OPTIONS).every(options => options.length >= 5));
-  assert.throws(() => chooseTactic(a, 'not-a-choice', db), /当前阶段/);
-  const b = chooseTactic(a, 'backline', db);
+  assert.equal(a.phase, 'target');
+  assert.equal(a.enemies.length, 5);
+  assert.throws(() => choosePriorityTarget(a, '__missing__', db), /敌方英雄/);
+  const targeted = choosePriorityTarget(a, a.enemies[0].championId, db);
+  assert.equal(targeted.phase, 'tactic');
+  assert.equal(targeted.tacticStage, 'engage');
+  assert.ok(Object.values(TACTIC_OPTIONS).every(options => options.length >= 8));
+  assert.throws(() => chooseTactic(targeted, 'not-a-choice', db), /当前阶段/);
+  const b = chooseTactic(targeted, 'backline', db);
   assert.equal(b.tacticStage, 'response');
   assert.equal(b.pendingTactics.length, 1);
   const attack = finishFight(shop, ['backline', 'burst', 'chase']);
@@ -124,8 +130,9 @@ test('enemy loadouts grow before battle and a no-shop defensive loop cannot guar
   const first = startFight(game, db);
   assert.ok(first.enemies.every(unit => unit.itemIds.length >= 1 && unit.augmentIds.length === 1));
   assert.ok(first.enemies.every(unit => db.items.some(item => item.id === unit.itemIds[0] && item.category === 'legendary')));
-  game = first;
+  game = choosePriorityTarget(first, first.enemies[0].championId, db);
   for (const choice of ['frontline', 'sustain', 'secure']) game = chooseTactic(game, choice, db);
+  game = chooseObjective(game, 'farm_wave', db);
   game = advanceRound(game, db);
   game = chooseAugment(game, game.augmentOffers[0].id, db);
   const second = startFight(game, db);
@@ -149,7 +156,7 @@ test('teamfight outcome, kills and assists produce an auditable next-round budge
   let game = finishFight(toShop(103), ['guard', 'peel', 'secure']);
   const record = game.lastRound;
   const income = record.economy;
-  assert.equal(income.total, income.base + income.winBonus + income.killBonus + income.assistBonus);
+  assert.equal(income.total, income.base + income.winBonus + income.killBonus + income.assistBonus + income.streakBonus + income.objectiveBonus);
   assert.equal(income.killBonus, record.playerKills * 250);
   assert.equal(income.assistBonus, record.playerAssists * 120);
   assert.equal(game.player.gold, 3500 + income.total);
@@ -160,6 +167,89 @@ test('teamfight outcome, kills and assists produce an auditable next-round budge
   assert.equal(game.round, 2);
   assert.equal(game.player.level, 7);
   assert.equal(game.augmentOffers.length, 3);
+});
+
+test('priority target changes the simulated fight and each stage offers more choices', () => {
+  let game = toShop(2);
+  game = startFight(game, db);
+  assert.equal(game.phase, 'target');
+  const run = championId => {
+    let current = choosePriorityTarget(game, championId, db);
+    for (const choice of ['press', 'all_in', 'execute']) current = chooseTactic(current, choice, db);
+    return current;
+  };
+  const tankFocus = run(game.enemies[0].championId);
+  const carryFocus = run(game.enemies[4].championId);
+  assert.equal(tankFocus.phase, 'objective');
+  assert.equal(carryFocus.phase, 'objective');
+  assert.equal(tankFocus.lastRound.focusTarget.championId, game.enemies[0].championId);
+  assert.equal(carryFocus.lastRound.focusTarget.championId, game.enemies[4].championId);
+  assert.notEqual(tankFocus.lastRound.winner, carryFocus.lastRound.winner);
+  assert.throws(() => advanceRound(carryFocus, db), /战略目标/);
+  assert.ok(Object.values(TACTIC_OPTIONS).every(options => options.length >= 8));
+});
+
+test('post-fight objectives exchange tower progress, map control, safety and money', () => {
+  let game = toShop(2);
+  game = startFight(game, db);
+  game = choosePriorityTarget(game, game.enemies[4].championId, db);
+  for (const choice of ['press', 'all_in', 'execute']) game = chooseTactic(game, choice, db);
+  assert.equal(game.lastRound.winner, 'ally');
+  assert.deepEqual(getObjectiveOptions(game).map(option => option.id), OBJECTIVE_OPTIONS.slice(0, 4).map(option => option.id));
+  assert.throws(() => chooseObjective(game, 'backdoor', db), /当前可用/);
+  const push = chooseObjective(game, 'push_tower', db);
+  const farm = chooseObjective(game, 'farm_wave', db);
+  const camps = chooseObjective(game, 'take_camps', db);
+  const defend = chooseObjective(game, 'defend_tower', db);
+  assert.equal(push.phase, 'report');
+  assert.ok(push.towers.enemy < farm.towers.enemy);
+  assert.ok(farm.player.gold > push.player.gold);
+  assert.equal(camps.mapControl, 1);
+  assert.ok(defend.towers.ally > push.towers.ally);
+  assert.equal(push.lastRound.objective.towerDamage, 100 - push.towers.enemy);
+  assert.deepEqual(push.rounds[0].objective, push.lastRound.objective);
+  assert.equal(push.lastRound.economy.total, game.lastRound.economy.total + push.lastRound.objective.gold);
+  assert.equal(game.towers.enemy, 100);
+  const nextFight = previous => {
+    let current = advanceRound(previous, db);
+    current = chooseAugment(current, current.augmentOffers[0].id, db);
+    current = startFight(current, db);
+    current = choosePriorityTarget(current, current.enemies[0].championId, db);
+    for (const choice of ['frontline', 'sustain', 'secure']) current = chooseTactic(current, choice, db);
+    return current.lastRound;
+  };
+  assert.ok(nextFight(camps).tacticImpact.teamAttackFactor > nextFight(farm).tacticImpact.teamAttackFactor);
+});
+
+test('winning streak funds more gear and final backdoor resolves with a recorded chance', () => {
+  let game = toShop(2);
+  game = finishFight(game, ['press', 'all_in', 'execute'], db, { targetId: game.enemies[4].championId, objectiveId: 'push_tower' });
+  assert.equal(game.lastRound.winner, 'ally');
+  assert.equal(game.lastRound.economy.streakBonus, 0);
+  game = advanceRound(game, db);
+  game = chooseAugment(game, game.augmentOffers[0].id, db);
+  game = finishFight(game, ['press', 'all_in', 'execute'], db, { targetId: game.enemies[4].championId, objectiveId: 'farm_wave' });
+  assert.equal(game.lastRound.winner, 'ally');
+  assert.equal(game.lastRound.economy.streakBonus, 300);
+  assert.ok(game.player.gold >= game.lastRound.economy.total);
+
+  for (let round = 3; round <= 4; round++) {
+    game = advanceRound(game, db);
+    game = chooseAugment(game, game.augmentOffers[0].id, db);
+    game = startFight(game, db);
+    game = choosePriorityTarget(game, game.enemies[4].championId, db);
+    for (const choice of ['press', 'all_in', 'execute']) game = chooseTactic(game, choice, db);
+    if (round === 3) game = chooseObjective(game, 'farm_wave', db);
+  }
+  assert.equal(game.phase, 'objective');
+  assert.ok(getObjectiveOptions(game).some(option => option.id === 'backdoor'));
+  const attempted = chooseObjective(game, 'backdoor', db);
+  assert.equal(attempted.phase, 'report');
+  assert.ok(attempted.lastRound.objective.backdoorChance > 0);
+  assert.equal(typeof attempted.lastRound.objective.backdoorSuccess, 'boolean');
+  assert.equal(attempted.lastRound.objective.backdoorSuccess, attempted.towers.enemy === 0);
+  assert.ok(['ally', 'enemy'].includes(attempted.result.winner));
+  assert.deepEqual(JSON.parse(JSON.stringify(attempted)), attempted);
 });
 
 test('eleven official-inspired hero/item/augment examples trigger explicit explainable links', () => {

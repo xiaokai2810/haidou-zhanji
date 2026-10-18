@@ -110,6 +110,18 @@ img { max-width: 100%; }
 .augment-choice strong { font-size: 16px; }
 .augment-copy { color: #aec5c6; font-size: 11px; line-height: 1.7; display: -webkit-box; -webkit-line-clamp: 4; -webkit-box-orient: vertical; overflow: hidden; }
 .augment-choice em { margin-top: auto; color: #9ce4d4; font-size: 11px; font-style: normal; font-weight: 700; }
+.augment-library { margin-top: 17px; border: 1px solid #465f68; background: #11252e; }
+.augment-library summary { padding: 13px 16px; cursor: pointer; color: #def5ec; font-size: 12px; font-weight: 800; }
+.augment-library summary b { color: #e4cd8a; margin-left: 5px; }
+.augment-library summary small { color: #91b7b3; font-weight: 400; margin-left: 12px; }
+.augment-library-search { display: block; width: calc(100% - 32px); margin: 0 16px 10px; padding: 9px 11px; color: #e6f4ef; border: 1px solid #4b6a70; background: #0d2029; font-size: 11px; }
+.augment-library-body { max-height: 460px; overflow: auto; padding: 0 16px 17px; scrollbar-color: #50747a transparent; }
+.augment-library-body h3 { margin: 16px 0 9px; color: #e0c995; font-size: 13px; }
+.augment-library-body h3 small { color: #8fb8b4; font-size: 10px; }
+.augment-library-body section>div { display: grid; grid-template-columns: repeat(3, minmax(0, 1fr)); gap: 7px; }
+.augment-library-body article { padding: 10px 11px; border: 1px solid #38545d; background: #1b343d; }
+.augment-library-body strong { color: #e5f4eb; font-size: 11px; }
+.augment-library-body p { margin: 5px 0 0; color: #98b3b5; font-size: 10px; line-height: 1.55; }
 .last-round-strip { display: flex; flex-wrap: wrap; gap: 9px 20px; align-items: center; margin: 0 0 15px; padding: 12px 14px; border: 1px solid #436c68; background: #17332f; font-size: 11px; }
 .last-round-strip.lose { border-color: #805960; background: #37272e; }
 .last-round-strip span { font-weight: 800; }
@@ -172,6 +184,25 @@ img { max-width: 100%; }
 .battle-side .unit-card>span:nth-child(2) { min-width: 0; }
 .battle-side .unit-card b { display: block; white-space: nowrap; text-overflow: ellipsis; overflow: hidden; font-size: 9px; margin-top: 4px; }
 .battle-side .unit-card small { display: none; }
+.map-status { display: grid; grid-template-columns: minmax(0, 1fr) auto minmax(0, 1fr); align-items: center; gap: 18px; margin: 13px 0 16px; padding: 14px; border: 1px solid #42636a; background: #142a34; }
+.map-status>div { display: grid; grid-template-columns: 1fr auto; gap: 7px; font-size: 10px; color: #a5c0bd; }
+.map-status>div b { color: #e6d298; }
+.map-status>div i { grid-column: 1 / -1; height: 6px; background: #314952; overflow: hidden; }
+.map-status>div i em { display: block; height: 100%; background: #83d9c7; }
+.map-status>div:last-child i em { background: #dc9791; }
+.map-status>strong { color: #d8d1a6; font-size: 10px; white-space: nowrap; }
+.target-grid { display: grid; grid-template-columns: repeat(5, minmax(0, 1fr)); gap: 9px; }
+.target-card { min-width: 0; min-height: 215px; display: flex; flex-direction: column; align-items: start; gap: 7px; padding: 13px; text-align: left; color: #f1ece9; border: 1px solid #745b62; background: linear-gradient(150deg, #372c37, #1e2b33); transition: transform .16s, border-color .16s; }
+.target-card:hover { transform: translateY(-3px); border-color: #f1b7a6; }
+.target-number { color: #e4ad9f; font: 700 10px 'Barlow Condensed'; letter-spacing: .14em; }
+.target-card .art-icon { width: 62px; height: 62px; border-color: #b27775; }
+.target-card strong { font-size: 14px; }
+.target-card small { color: #c2aeb4; font-size: 10px; }
+.target-card em { color: #e0c590; font-size: 10px; font-style: normal; }
+.target-card b { margin-top: auto; color: #f3baaa; font-size: 11px; }
+.focus-strip, .focus-outcome { display: flex; flex-wrap: wrap; align-items: center; gap: 8px; margin-top: 10px; padding: 11px 13px; border-left: 3px solid #eaa99e; background: #342833; color: #ccb9bc; font-size: 10px; }
+.focus-strip strong, .focus-outcome strong { color: #f5d3bf; font-size: 12px; }
+.focus-strip span, .focus-outcome span { margin-left: auto; }
 .enemy-scout { margin-top: 10px; border: 1px solid #675660; background: #241f2b; color: #efd8d4; }
 .enemy-scout summary { display: flex; justify-content: space-between; align-items: center; gap: 12px; padding: 11px 14px; cursor: pointer; list-style: none; font-size: 11px; }
 .enemy-scout summary::-webkit-details-marker { display: none; }
@@ -186,7 +217,7 @@ img { max-width: 100%; }
 .enemy-scout-grid strong { margin-bottom: 6px; color: #f5d7c9; font-size: 11px; }
 .enemy-scout-grid small { color: #c5adb3; font-size: 10px; line-height: 1.5; overflow-wrap: anywhere; }
 .enemy-scout-grid em { margin-top: 7px; color: #e8b7a2; font-size: 10px; font-style: normal; line-height: 1.5; overflow-wrap: anywhere; }
-.tactic-options { display: grid; grid-template-columns: repeat(5, minmax(0, 1fr)); gap: 9px; margin-top: 15px; }
+.tactic-options { display: grid; grid-template-columns: repeat(auto-fit, minmax(155px, 1fr)); gap: 9px; margin-top: 15px; }
 .tactic-card { min-height: 178px; display: flex; flex-direction: column; align-items: start; gap: 9px; padding: 14px; text-align: left; color: #e6f1ee; border: 1px solid #44616a; background: #1a313b; transition: transform .16s, border-color .16s, background .16s; }
 .tactic-card:hover { transform: translateY(-3px); border-color: #8bdfd0; background: #23434b; }
 .tactic-card small { color: #d6bc86; font: 700 10px 'Barlow Condensed'; letter-spacing: .12em; }
@@ -205,6 +236,27 @@ img { max-width: 100%; }
 .result-hero>div { display: flex; gap: 32px; flex-wrap: wrap; margin-top: 14px; }
 .result-hero b { display: flex; flex-direction: column; color: #acd0c9; font-size: 11px; }
 .result-hero strong { color: #f1f8ed; font: 700 35px 'Barlow Condensed'; }
+.objective-heading { display: flex; justify-content: space-between; align-items: baseline; gap: 10px; margin: 23px 0 12px; }
+.objective-heading h2 { margin: 0; font-size: 16px; }
+.objective-heading span { color: #9eb6ba; font-size: 10px; }
+.objective-grid { display: grid; grid-template-columns: repeat(3, minmax(0, 1fr)); gap: 10px; }
+.objective-card { min-height: 174px; display: flex; flex-direction: column; align-items: start; gap: 9px; padding: 16px; border: 1px solid #5e6d67; background: linear-gradient(145deg, #223b3c, #172c36); color: #eaf5ee; text-align: left; transition: transform .16s, border-color .16s; }
+.objective-card:hover { transform: translateY(-3px); border-color: #a6e1cc; }
+.objective-card.backdoor { border-color: #ba846a; background: linear-gradient(145deg, #493835, #282b33); }
+.objective-card small { color: #e5c98d; font: 700 10px 'Barlow Condensed'; letter-spacing: .15em; }
+.objective-card strong { font-size: 16px; }
+.objective-card p { margin: 0; color: #b2c7c1; font-size: 11px; line-height: 1.65; }
+.objective-card em { margin-top: auto; color: #a9e6d2; font-size: 10px; font-style: normal; font-weight: 800; }
+.objective-card.backdoor em { color: #f2b7a0; }
+.objective-outcome { margin-top: 12px; padding: 15px 18px; border: 1px solid #64847a; background: #1f3937; }
+.objective-outcome>div { display: flex; align-items: center; gap: 10px; }
+.objective-outcome span { color: #9bc5b6; font-size: 10px; }
+.objective-outcome strong { color: #f4e9ca; font-size: 14px; }
+.objective-outcome em { margin-left: auto; color: #e7cf87; font-size: 10px; font-style: normal; }
+.objective-outcome p { color: #dcece4; font-size: 11px; line-height: 1.65; }
+.objective-outcome small { color: #9bc4b9; font-size: 10px; }
+.backdoor-result { margin-top: 12px; padding: 13px 16px; border: 1px solid #ba7568; background: #3c2b32; color: #efd2c4; font-size: 11px; line-height: 1.6; }
+.backdoor-result.success { border-color: #89ccad; background: #1e413d; color: #dcf0dd; }
 .report-grid { display: grid; grid-template-columns: 1fr 1fr; gap: 14px; margin-top: 15px; }
 .report-panel { min-width: 0; padding: 19px; border: 1px solid #34535c; background: #132832; }
 .report-panel h2 { margin: 0 0 14px; font-size: 15px; }
@@ -291,6 +343,8 @@ img { max-width: 100%; }
   .roster-side { display: none; }
   .dossier-section { display: inline-block; width: calc(50% - 7px); vertical-align: top; }
   .dossier-section:nth-of-type(odd) { margin-right: 10px; }
+  .target-grid { grid-template-columns: repeat(3, minmax(0, 1fr)); }
+  .augment-library-body section>div { grid-template-columns: repeat(2, minmax(0, 1fr)); }
 }
 @media (max-width: 650px) {
   .game-header { min-height: 67px; padding: 10px 16px; }
@@ -322,10 +376,16 @@ img { max-width: 100%; }
   .bench-heading { align-items: start; flex-direction: column; gap: 4px; }
   .bench-list { grid-template-columns: repeat(2, minmax(0, 1fr)); }
   .augment-grid { grid-template-columns: 1fr; }
+  .augment-library-body section>div { grid-template-columns: 1fr; }
   .augment-choice { min-height: 150px; }
   .shop-side { grid-template-columns: 1fr; }
   .shop-grid { grid-template-columns: 1fr; max-height: 405px; }
   .tactic-options { grid-template-columns: 1fr; }
+  .target-grid, .objective-grid { grid-template-columns: repeat(2, minmax(0, 1fr)); }
+  .target-card { min-height: 170px; }
+  .map-status { gap: 8px; padding: 10px; }
+  .map-status>strong { font-size: 9px; }
+  .objective-heading { flex-direction: column; align-items: start; }
   .tactic-card { min-height: 110px; }
   .battle-scene { padding: 10px; grid-template-columns: 1fr 20px 1fr; }
   .battle-scene>strong { font-size: 15px; }
@@ -335,6 +395,7 @@ img { max-width: 100%; }
   .result-hero>div { gap: 14px; }
   .round-history>div { grid-template-columns: 30px 1fr 70px 70px; font-size: 10px; }
 }
+@media (max-width: 390px) { .target-grid, .objective-grid { grid-template-columns: 1fr; } }
 @media (prefers-reduced-motion: reduce) {
   html { scroll-behavior: auto; }
   .major-button, .augment-choice, .tactic-card { transition: none; }

@@ -49,6 +49,9 @@ export const TACTIC_OPTIONS = {
     { id: 'flank', name: '侧翼包抄', description: '让队友一同压向侧翼；进攻增强，己方后排更暴露。' },
     { id: 'guard', name: '守住后排', description: '优先限制切入者，降低队友承受的伤害。' },
     { id: 'steel', name: '贴身叠钢', description: '贴近前排，为心之钢创造更多触发机会。' },
+    { id: 'ambush', name: '草丛伏击', description: '开局一波爆发更强，但暴露后容易遭到反扑。' },
+    { id: 'poke', name: '远程消耗', description: '远程英雄开战前压低血线；近战英雄难以发挥。' },
+    { id: 'press', name: '正面压进', description: '全队抢先占据阵地，增加队友输出，也更容易挨打。' },
   ],
   response: [
     { id: 'burst', name: '集中爆发', description: '抢一波击倒，提升伤害，同时承担更多反打。' },
@@ -56,6 +59,9 @@ export const TACTIC_OPTIONS = {
     { id: 'peel', name: '回身保护', description: '压低队友承伤，牺牲一部分个人输出。' },
     { id: 'sustain', name: '拉长交战', description: '拖延团战、获得少量回复，适合成长装备。' },
     { id: 'steel', name: '寻找心之钢窗口', description: '优先贴近可触发目标，承受额外风险。' },
+    { id: 'interrupt', name: '留控制断招', description: '限制刺客或法师的关键技能，降低敌方爆发。' },
+    { id: 'all_in', name: '孤注一掷', description: '投入所有技能争取击杀，显著提高个人输出与风险。' },
+    { id: 'bait', name: '佯退反包', description: '诱敌深入后由队友合围，对突进阵容更有效。' },
   ],
   finish: [
     { id: 'chase', name: '追击残血', description: '争取击倒与击杀赏金；追深了也可能被反杀。' },
@@ -63,8 +69,23 @@ export const TACTIC_OPTIONS = {
     { id: 'disengage', name: '果断撤退', description: '保住己方剩余战力，减少伤亡但放弃部分输出。' },
     { id: 'counter', name: '等待反打', description: '等敌方突进后反手反击，尤其克制刺客。' },
     { id: 'steel', name: '最后一次叠钢', description: '延长贴身时间，为下回合换取更多永久生命值。' },
+    { id: 'execute', name: '集火斩杀目标', description: '全队追击标记目标，放弃部分阵地保护。' },
+    { id: 'escort', name: '护送核心撤出', description: '保护己方残血并降低损失，团战伤害随之下降。' },
+    { id: 'siege_ready', name: '留技能准备推塔', description: '收尾保留爆发，若赢下团战随后推塔更强。' },
   ],
 };
+
+export const OBJECTIVE_OPTIONS = [
+  { id: 'push_tower', name: '带线推塔', description: '用存活队员冲击敌方防御塔，赢团后推进更快并获得塔钱。' },
+  { id: 'farm_wave', name: '清线发育', description: '稳妥收集兵线经济，补齐下一轮装备。' },
+  { id: 'take_camps', name: '争夺地图补给', description: '抢占回血包与关键位置，获取金币并提高下一轮团战的阵地优势。' },
+  { id: 'defend_tower', name: '回防己塔', description: '减少敌方反推，保住基地防线。' },
+  { id: 'backdoor', name: '孤身偷塔', description: '最终回合绕开正面战场直取敌塔；失败会给对手反推机会。' },
+];
+
+export function getObjectiveOptions(game) {
+  return OBJECTIVE_OPTIONS.filter(option => option.id !== 'backdoor' || game.round === game.maxRounds);
+}
 
 const SYNERGY_RULES = [
   { id: 'yasuo_crit', title: '疾风与暴击律动', heroes: ['Yasuo', 'Yone'], items: ['3031'], augments: ['critical_rhythm'], attack: .07, detail: '亚索/永恩的暴击打法叠加无尽之刃与暴击律动；文字团战额外输出。' },
@@ -185,7 +206,8 @@ export function createStandaloneGame({ db, seed = 1 }) {
     heroOffers: [], heroBench: [], augmentOffers: [], offerRarity: null,
     seenAugmentIds: [], augmentRerollsRemaining: 0,
     score: { ally: 0, enemy: 0 }, sideEconomy: { ally: 0, enemy: 0 },
-    tacticStage: null, pendingTactics: [], rounds: [], lastRound: null,
+    winStreak: { ally: 0, enemy: 0 }, towers: { ally: 100, enemy: 100 }, mapControl: 0,
+    tacticStage: null, priorityTargetId: null, pendingTactics: [], rounds: [], lastRound: null,
     result: null, log: [{ kind: 'system', round: 1, text: '独立对局开始：随机两张个人英雄卡，队友未选的四张卡进入公共备选席。英雄抽样为本站模拟。' }],
   };
   const used = new Set();
@@ -351,10 +373,24 @@ export function startFight(game, db) {
   const next = clone(game);
   for (const unit of next.allies) botGear(unit, 'ally', next, db);
   for (const unit of next.enemies) botGear(unit, 'enemy', next, db);
+  next.phase = 'target';
+  next.tacticStage = null;
+  next.priorityTargetId = null;
+  next.pendingTactics = [];
+  next.log.push({ kind: 'combat', round: next.round, text: `第 ${next.round} 场团战开始：先确定集火目标，再选择开团、交战与收尾策略。` });
+  return next;
+}
+
+export function choosePriorityTarget(game, championId, db) {
+  if (game.phase !== 'target') throw new Error('当前不是集火目标选择阶段');
+  const enemy = game.enemies.find(unit => unit.championId === championId);
+  const champion = byId(db.champions, championId);
+  if (!enemy || !champion) throw new Error('只能标记本场的一名敌方英雄');
+  const next = clone(game);
+  next.priorityTargetId = championId;
   next.phase = 'tactic';
   next.tacticStage = STAGES[0];
-  next.pendingTactics = [];
-  next.log.push({ kind: 'combat', round: next.round, text: `第 ${next.round} 场团战开始：选择开团目标、交战应对和收尾策略。` });
+  next.log.push({ kind: 'decision', round: next.round, text: `全队标记「${champion.name}」为优先集火目标。` });
   return next;
 }
 
@@ -403,9 +439,10 @@ function tacticEffects(game, db) {
   const effects = {
     attack: 1 + proxy.attack + clamp(synergies.reduce((sum, rule) => sum + rule.attack, 0), 0, .25),
     defense: 1 + proxy.defense + clamp(synergies.reduce((sum, rule) => sum + rule.defense, 0), 0, .20),
-    sustain: proxy.sustain, teamAttack: 1, teamDefense: 1,
+    sustain: proxy.sustain, teamAttack: clamp(1 + (game.mapControl || 0) * .035, .86, 1.14),
+    teamDefense: clamp(1 + (game.mapControl || 0) * .018, .92, 1.08),
     backline: 1, frontline: 1, steel: 1 + clamp(synergies.reduce((sum, rule) => sum + rule.steel, 0), 0, .7),
-    target: 'normal', extraRisk: 1,
+    target: 'normal', extraRisk: 1, openingAttack: 1, focusDamage: 1, siege: 1,
   };
   if (['Nasus', 'Veigar'].includes(hero.id) && game.player.augmentIds.includes('stackosaurusrex')) {
     effects.attack += Math.min(.08, (game.player.growth.stackosaurusrex || 0) * .012);
@@ -416,6 +453,9 @@ function tacticEffects(game, db) {
     case 'flank': effects.target = 'backline'; effects.backline *= 1.11; effects.teamAttack *= 1.05; effects.teamDefense *= .94; break;
     case 'guard': effects.target = 'assassin'; effects.attack *= .96; effects.teamAttack *= .97; effects.teamDefense *= game.enemies.some(unit => byId(db.champions, unit.championId)?.tags.includes('Assassin')) ? 1.08 : 1.02; break;
     case 'steel': effects.target = 'frontline'; effects.attack *= .96; effects.steel *= 1.38; break;
+    case 'ambush': effects.openingAttack *= 1.27; effects.extraRisk *= 1.09; break;
+    case 'poke': effects.openingAttack *= ranged ? 1.22 : .88; effects.target = 'backline'; break;
+    case 'press': effects.teamAttack *= 1.08; effects.teamDefense *= .94; break;
   }
   switch (chosen.response) {
     case 'burst': effects.attack *= 1.15; effects.extraRisk *= 1.07; break;
@@ -423,6 +463,9 @@ function tacticEffects(game, db) {
     case 'peel': effects.attack *= .94; effects.teamAttack *= .96; effects.teamDefense *= 1.04; break;
     case 'sustain': effects.attack *= .97; effects.sustain += .07; effects.defense *= 1.04; break;
     case 'steel': effects.attack *= .98; effects.steel *= 1.34; effects.extraRisk *= 1.04; break;
+    case 'interrupt': effects.teamDefense *= game.enemies.some(unit => byId(db.champions, unit.championId)?.tags.some(tag => ['Assassin', 'Mage'].includes(tag))) ? 1.08 : 1.025; effects.attack *= .97; break;
+    case 'all_in': effects.attack *= 1.20; effects.extraRisk *= 1.16; break;
+    case 'bait': effects.teamAttack *= game.enemies.some(unit => byId(db.champions, unit.championId)?.tags.includes('Assassin')) ? 1.10 : 1.035; effects.teamDefense *= .96; break;
   }
   switch (chosen.finish) {
     case 'chase': effects.attack *= 1.12; effects.extraRisk *= 1.10; break;
@@ -430,11 +473,14 @@ function tacticEffects(game, db) {
     case 'disengage': effects.attack *= .85; effects.teamAttack *= .88; effects.teamDefense *= 1.04; effects.defense *= 1.07; break;
     case 'counter': effects.attack *= game.enemies.some(unit => byId(db.champions, unit.championId)?.tags.includes('Assassin')) ? 1.08 : 1.01; effects.teamDefense *= 1.02; effects.target = 'assassin'; break;
     case 'steel': effects.attack *= .94; effects.steel *= 1.30; break;
+    case 'execute': effects.focusDamage *= 1.18; effects.teamDefense *= .94; break;
+    case 'escort': effects.attack *= .84; effects.teamAttack *= .88; effects.teamDefense *= 1.09; break;
+    case 'siege_ready': effects.attack *= .92; effects.siege *= 1.3; break;
   }
   return effects;
 }
 
-function chooseTarget(game, attacker, defenders, isPlayer, effects) {
+function chooseTarget(game, attacker, defenders, isPlayer, effects, friendly) {
   let best = null, bestScore = -Infinity;
   for (let index = 0; index < defenders.length; index++) {
     const target = defenders[index];
@@ -447,6 +493,7 @@ function chooseTarget(game, attacker, defenders, isPlayer, effects) {
       if (effects.target === 'frontline' && frontline(target.champion)) score += 2.8;
       if (effects.target === 'assassin' && target.champion.tags.includes('Assassin')) score += 3;
     }
+    if (friendly && target.champion.id === game.priorityTargetId) score += isPlayer ? 4.2 : 1.75;
     score += random(game) * .2;
     if (score > bestScore) { bestScore = score; best = index; }
   }
@@ -482,18 +529,19 @@ function simulateBattle(game, db) {
         const attacker = attackers[index];
         if (attacker.hp <= 0) continue;
         const playerAttack = friendly && index === 0;
-        const targetIndex = chooseTarget(game, attacker, defenders, playerAttack, effects);
+        const targetIndex = chooseTarget(game, attacker, defenders, playerAttack, effects, friendly);
         if (targetIndex === null) continue;
         const target = defenders[targetIndex];
         let hit = damageProfile(attacker, target).total * .5 * (.94 + random(game) * .12);
         if (playerAttack) {
           hit *= effects.attack;
+          if (tick < 8) hit *= effects.openingAttack;
           if (backline(target.champion)) hit *= effects.backline;
           if (frontline(target.champion)) hit *= effects.frontline;
           if (game.player.itemIds.includes('3084') && frontline(target.champion) && tick % 5 === 0 && steelHits < 6) {
             steelHits += Math.max(1, Math.round(effects.steel));
           }
-        } else if (friendly) hit *= effects.teamAttack;
+        } else if (friendly) hit *= effects.teamAttack * (tick < 8 ? 1 + (effects.openingAttack - 1) * .4 : 1);
         else {
           const giantFactor = target.maxHp >= attacker.maxHp * 1.15 || target.champion.tags.includes('Tank') ? 1 : .3;
           hit *= 1 + (attacker.combat?.attack || 0) + (attacker.combat?.giantDamage || 0) * giantFactor;
@@ -501,6 +549,7 @@ function simulateBattle(game, db) {
           else hit /= effects.teamDefense;
         }
         if (friendly) hit /= 1 + (target.combat?.defense || 0);
+        if (friendly && target.champion.id === game.priorityTargetId) hit *= playerAttack ? effects.focusDamage * 1.06 : 1 + (effects.focusDamage - 1) * .5;
         pending[targetIndex] += hit;
         attacker.damage += hit;
         if (!killers[targetIndex] || hit > killers[targetIndex].hit) killers[targetIndex] = { index, hit };
@@ -546,24 +595,33 @@ function simulateBattle(game, db) {
   const playerKills = allies[0].kills;
   const playerAssists = allies[0].damage > 0 ? Math.min(5, Math.max(0, allyKills - playerKills)) : 0;
   const income = {
-    base: 1500, winBonus: winner === 'ally' ? 900 : 350,
+    base: 1500, winBonus: winner === 'ally' ? 1050 : 350,
     killBonus: playerKills * 250, assistBonus: playerAssists * 120,
   };
-  income.total = income.base + income.winBonus + income.killBonus + income.assistBonus;
+  const nextStreak = winner === 'ally' ? (game.winStreak?.ally || 0) + 1 : 0;
+  income.streakBonus = winner === 'ally' ? Math.min(900, Math.max(0, nextStreak - 1) * 300) : 0;
+  income.objectiveBonus = 0;
+  income.total = income.base + income.winBonus + income.killBonus + income.assistBonus + income.streakBonus;
   const tacticImpact = {
     playerAttackFactor: Number(effects.attack.toFixed(2)),
     playerDamageTakenFactor: Number((effects.extraRisk / effects.defense).toFixed(2)),
     teamAttackFactor: Number(effects.teamAttack.toFixed(2)),
     teamDamageTakenFactor: Number((1 / effects.teamDefense).toFixed(2)),
     steelFactor: Number(effects.steel.toFixed(2)),
+    siegeFactor: Number(effects.siege.toFixed(2)),
   };
-  events.unshift(`本站战术推演：${game.pendingTactics.map(choice => choice.name).join(' → ')}；基础个人输出系数 ×${tacticImpact.playerAttackFactor}，队友承伤系数 ×${tacticImpact.teamDamageTakenFactor}。`);
+  const focusUnit = enemies.find(unit => unit.champion.id === game.priorityTargetId);
+  const focusTarget = focusUnit ? {
+    championId: focusUnit.champion.id, name: focusUnit.champion.name,
+    killed: focusUnit.hp <= 0, remainingHp: Math.max(0, Math.round(focusUnit.hp)),
+  } : null;
+  events.unshift(`本站战术推演：集火${focusTarget?.name || '敌方'}，${game.pendingTactics.map(choice => choice.name).join(' → ')}；基础个人输出系数 ×${tacticImpact.playerAttackFactor}，队友承伤系数 ×${tacticImpact.teamDamageTakenFactor}。`);
   return {
     round: game.round, winner, seconds: elapsed,
     tactics: [...game.pendingTactics], playerDamage: Math.round(allies[0].damage),
     playerKills, playerAssists, playerDeaths: allies[0].hp <= 0 ? 1 : 0,
     allyKills, enemyKills, steelHits: Math.min(8, steelHits),
-    economy: income, tacticImpact, events,
+    economy: income, tacticImpact, events, focusTarget,
     remaining: { ally: allyAlive.length, enemy: enemyAlive.length, playerHp: Math.max(0, Math.round(allies[0].hp)) },
     allyHp: allies.map(unit => Math.max(0, Math.round(unit.hp))),
     enemyHp: enemies.map(unit => Math.max(0, Math.round(unit.hp))),
@@ -635,6 +693,9 @@ function resolveFight(game, db) {
   game.lastRound = round;
   game.rounds.push(round);
   game.score[round.winner]++;
+  game.winStreak ||= { ally: 0, enemy: 0 };
+  game.winStreak[round.winner]++;
+  game.winStreak[round.winner === 'ally' ? 'enemy' : 'ally'] = 0;
   game.player.kills += round.playerKills;
   game.player.assists += round.playerAssists;
   game.player.deaths += round.playerDeaths;
@@ -653,21 +714,118 @@ function resolveFight(game, db) {
   game.player.gold += round.economy.total;
   game.sideEconomy.ally += 1300;
   game.sideEconomy.enemy += 1300;
-  game.sideEconomy[round.winner] += 650 + (round.winner === 'ally' ? round.allyKills : round.enemyKills) * 80;
+  game.sideEconomy[round.winner] += 900 + (round.winner === 'ally' ? round.allyKills : round.enemyKills) * 100 + Math.max(0, game.winStreak[round.winner] - 1) * 180;
   game.log.push({ kind: 'combat', round: game.round, text: `第 ${game.round} 场${round.winner === 'ally' ? '我方获胜' : '敌方获胜'}；你击倒 ${round.playerKills} 人、助攻 ${round.playerAssists} 次。` });
-  game.log.push({ kind: 'economy', round: game.round, text: `本轮收入 ${round.economy.total} 金币：基础 ${round.economy.base} + ${round.winner === 'ally' ? '胜利' : '失利'} ${round.economy.winBonus} + 击杀 ${round.economy.killBonus} + 助攻 ${round.economy.assistBonus}。` });
+  game.log.push({ kind: 'economy', round: game.round, text: `团战收入 ${round.economy.total} 金币：基础 ${round.economy.base} + ${round.winner === 'ally' ? '胜利' : '失利'} ${round.economy.winBonus} + 击杀 ${round.economy.killBonus} + 助攻 ${round.economy.assistBonus} + 连胜 ${round.economy.streakBonus}。` });
   for (const event of round.events.slice(0, 5)) game.log.push({ kind: 'event', round: game.round, text: event });
-  game.phase = 'report';
+  game.phase = 'objective';
   game.tacticStage = null;
-  if (game.round === game.maxRounds) {
-    const difference = game.rounds.reduce((sum, entry) => sum + entry.allyKills - entry.enemyKills, 0);
-    const winner = game.score.ally > game.score.enemy ? 'ally' : game.score.enemy > game.score.ally ? 'enemy' : difference >= 0 ? 'ally' : 'enemy';
-    game.result = {
-      winner, score: { ...game.score }, playerKills: game.player.kills,
-      playerDeaths: game.player.deaths, playerAssists: game.player.assists,
-      reason: game.score.ally === game.score.enemy ? '团战回合打平，按全场击倒数判定。' : '按四场团战获胜回合数判定。',
-    };
+}
+
+function finishResult(game) {
+  const destroyedEnemy = game.towers.enemy <= 0;
+  const destroyedAlly = game.towers.ally <= 0;
+  const stoleBase = game.lastRound?.objective?.id === 'backdoor' && game.lastRound.objective.backdoorSuccess;
+  const allyPoints = game.score.ally * 25 + (100 - game.towers.enemy) * .8 + game.mapControl * 3;
+  const enemyPoints = game.score.enemy * 25 + (100 - game.towers.ally) * .8 - game.mapControl * 3;
+  const killDifference = game.rounds.reduce((sum, round) => sum + round.allyKills - round.enemyKills, 0);
+  const winner = stoleBase ? 'ally' : destroyedEnemy !== destroyedAlly ? (destroyedEnemy ? 'ally' : 'enemy')
+    : allyPoints !== enemyPoints ? (allyPoints > enemyPoints ? 'ally' : 'enemy')
+    : killDifference >= 0 ? 'ally' : 'enemy';
+  const reason = stoleBase ? '最后一波偷塔成功，终局直接获胜。'
+    : destroyedEnemy !== destroyedAlly ? '防御塔被摧毁，推进结果直接决定胜负。'
+    : '按团战胜场、推塔进度与地图控制综合判定；同分时比较击倒数。';
+  game.result = {
+    winner, score: { ...game.score }, towers: { ...game.towers }, mapControl: game.mapControl,
+    objectivePoints: { ally: Number(allyPoints.toFixed(1)), enemy: Number(enemyPoints.toFixed(1)) },
+    playerKills: game.player.kills, playerDeaths: game.player.deaths,
+    playerAssists: game.player.assists, reason,
+  };
+}
+
+/** Choose what the team does with the space won or lost after each fight. */
+export function chooseObjective(game, id, db) {
+  if (game.phase !== 'objective' || !game.lastRound) throw new Error('只能在团战后选择战略目标');
+  const option = getObjectiveOptions(game).find(entry => entry.id === id);
+  if (!option) throw new Error('请选择当前可用的战略目标');
+  const next = clone(game);
+  next.towers ||= { ally: 100, enemy: 100 };
+  next.mapControl ||= 0;
+  next.winStreak ||= { ally: 0, enemy: 0 };
+  const round = next.lastRound;
+  const won = round.winner === 'ally';
+  const basePressure = won ? 3 + round.remaining.enemy * 2 : 14 + round.remaining.enemy * 3;
+  const oldEnemyTower = next.towers.enemy;
+  const oldAllyTower = next.towers.ally;
+  const oldControl = next.mapControl;
+  let enemyDamage = 0;
+  let ownDamage = basePressure;
+  let gold = 0;
+  let backdoorChance = null;
+  let backdoorSuccess = null;
+  let text;
+  switch (id) {
+    case 'push_tower':
+      enemyDamage = won ? Math.round((18 + round.remaining.ally * 4 + (round.focusTarget?.killed ? 2 : 0)) * (round.tacticImpact.siegeFactor || 1) * (1 + Math.max(0, next.mapControl) * .03))
+        : 3 + round.remaining.ally * 3;
+      ownDamage += won ? 0 : 7;
+      gold = won ? 700 + Math.min(250, enemyDamage * 7) : 150;
+      text = won ? '赢下团战后推进兵线，拆掉敌塔一段耐久并拿到塔钱。' : '团战失利后仍尝试强推，推进有限且暴露了己方防线。';
+      break;
+    case 'farm_wave':
+      gold = won ? 1350 : 1000;
+      ownDamage = Math.round(basePressure * (won ? 1 : 1.08));
+      text = '回收兵线资源，为下一轮海克斯与装备积攒金币。';
+      break;
+    case 'take_camps':
+      gold = won ? 900 : 400;
+      next.mapControl = clamp(next.mapControl + (won ? 1 : -1), -4, 4);
+      ownDamage += won ? 1 : 4;
+      text = won ? '拿下回血包并控制关键位置，下一轮团战获得阵地优势。' : '补给争夺受阻，失去一部分地图控制。';
+      break;
+    case 'defend_tower':
+      gold = won ? 400 : 550;
+      ownDamage = Math.round(basePressure * .22);
+      text = '回防并清理兵线，显著减少敌方推进。';
+      break;
+    case 'backdoor': {
+      const gear = next.player.itemIds.filter(itemId => byId(db.items, itemId)?.category !== 'component').length;
+      const profile = panelFor(next.player, db);
+      const mobility = profile.stats.as > 1.25 ? .04 : 0;
+      backdoorChance = clamp(.08 + (100 - next.towers.enemy) * .0035 + round.remaining.ally * .045
+        - round.remaining.enemy * .035 + gear * .025 + (won ? .12 : 0)
+        + next.mapControl * .025 + mobility - (round.playerDeaths ? .12 : 0), .01, .86);
+      backdoorChance = Number(backdoorChance.toFixed(2));
+      backdoorSuccess = random(next) < backdoorChance;
+      if (backdoorSuccess) {
+        enemyDamage = next.towers.enemy;
+        gold = 900;
+        text = `偷塔成功！你绕开正面防线，击穿敌塔（推演成功率 ${Math.round(backdoorChance * 100)}%）。`;
+      } else {
+        ownDamage += 18;
+        text = `偷塔失败，敌方趁机反推（推演成功率 ${Math.round(backdoorChance * 100)}%）。`;
+      }
+      break;
+    }
   }
+  next.towers.enemy = clamp(oldEnemyTower - enemyDamage, 0, 100);
+  next.towers.ally = clamp(oldAllyTower - ownDamage, 0, 100);
+  const towerDamage = oldEnemyTower - next.towers.enemy;
+  const ownTowerDamage = oldAllyTower - next.towers.ally;
+  const mapControlDelta = next.mapControl - oldControl;
+  const objective = { id, name: option.name, text, gold, towerDamage, ownTowerDamage,
+    mapControlDelta, backdoorChance, backdoorSuccess };
+  round.objective = objective;
+  round.economy.objectiveBonus = gold;
+  round.economy.total += gold;
+  next.rounds[next.rounds.length - 1] = clone(round);
+  next.player.gold += gold;
+  next.sideEconomy.ally += won ? Math.round(gold * .35) : 0;
+  next.log.push({ kind: 'objective', round: next.round, text: `${option.name}：${text}敌塔 -${towerDamage}，我塔 -${ownTowerDamage}，金币 +${gold}${mapControlDelta ? `，地图控制 ${mapControlDelta > 0 ? '+' : ''}${mapControlDelta}` : ''}。` });
+  next.log.push({ kind: 'economy', round: next.round, text: `本轮总收入 ${round.economy.total} 金币，其中团战 ${round.economy.total - gold}、战略行动 ${gold}。` });
+  next.phase = 'report';
+  if (next.round === next.maxRounds) finishResult(next);
+  return next;
 }
 
 export function chooseTactic(game, id, db) {
@@ -684,16 +842,17 @@ export function chooseTactic(game, id, db) {
 }
 
 export function advanceRound(game, db) {
-  if (game.phase !== 'report') throw new Error('请先完成本轮团战并查看战报');
+  if (game.phase !== 'report' || !game.lastRound?.objective) throw new Error('请先完成本轮战略目标并查看战报');
   const next = clone(game);
   if (next.round >= next.maxRounds) {
     next.phase = 'finished';
-    next.log.push({ kind: 'result', round: next.round, text: `整场结束：${next.result.winner === 'ally' ? '我方获胜' : '敌方获胜'}，团战 ${next.score.ally}:${next.score.enemy}。` });
+    next.log.push({ kind: 'result', round: next.round, text: `整场结束：${next.result.winner === 'ally' ? '我方获胜' : '敌方获胜'}，团战 ${next.score.ally}:${next.score.enemy}，敌塔剩余 ${next.towers.enemy}、我塔剩余 ${next.towers.ally}。` });
     return next;
   }
   next.round++;
   next.phase = 'augment_draft';
   next.pendingTactics = [];
+  next.priorityTargetId = null;
   next.player.level = LEVELS[next.round - 1];
   syncUnit(next.player, db, true);
   for (const unit of [...next.allies, ...next.enemies]) {
