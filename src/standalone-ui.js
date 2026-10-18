@@ -8,6 +8,9 @@ import {
 } from './standalone-engine.js';
 
 const SAVE_KEY = 'mayhem-standalone-v2';
+const duelUrl = location.hostname.endsWith('github.io')
+  ? 'http://101.132.103.55/haidou-zhanji/duel.html'
+  : new URL('duel.html', new URL(import.meta.env.BASE_URL, location.origin)).href;
 const root = document.querySelector('#game-root');
 const escapeHtml = value => String(value ?? '').replace(/[&<>"']/g, char => ({
   '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;',
@@ -61,11 +64,11 @@ function progress() {
   return `<div class="run-progress" aria-label="游戏阶段">${steps.map(([id, label], index) => `<div class="${index === active ? 'active' : index < active ? 'done' : ''}"><b>${String(index + 1).padStart(2, '0')}</b><span>${label}</span></div>`).join('')}</div>`;
 }
 function topbar() {
-  return `<header class="game-header"><a class="game-brand" href="${import.meta.env.BASE_URL}"><i>M<span>✦</span></i><span><b>海斗战记</b><small>MAYHEM CHRONICLES</small></span></a><div class="game-header-right"><span class="patch-pill">● PATCH ${escapeHtml(db.meta.patch)}</span><a class="builder-link" href="https://xiaokai2810.github.io/haidou-lunzhan/">构筑实验室 ↗</a>${game ? `<button class="reset-button ${ui.resetArmed ? 'armed' : ''}" data-action="reset">${ui.resetArmed ? '确认重开？' : '重新匹配'}</button>` : ''}</div></header>`;
+  return `<header class="game-header"><a class="game-brand" href="${import.meta.env.BASE_URL}"><i>M<span>✦</span></i><span><b>海斗战记</b><small>MAYHEM CHRONICLES</small></span></a><div class="game-header-right"><span class="patch-pill">● PATCH ${escapeHtml(db.meta.patch)}</span><a class="builder-link" href="${escapeHtml(duelUrl)}">双人联机 ↗</a><a class="builder-link" href="https://xiaokai2810.github.io/haidou-lunzhan/">构筑实验室 ↗</a>${game ? `<button class="reset-button ${ui.resetArmed ? 'armed' : ''}" data-action="reset">${ui.resetArmed ? '确认重开？' : '重新匹配'}</button>` : ''}</div></header>`;
 }
 function intro() {
   const splash = lookup('champions', 'Yasuo')?.splash || '';
-  return `<section class="game-intro" style="--cover:url('${escapeHtml(splash)}')"><div class="intro-copy"><span class="tiny-label">AN INTERACTIVE 5V5 MAYHEM STORY</span><h1>一局海斗，<br><em>由你改写。</em></h1><p>从随机英雄卡开始，逐轮选择海克斯、经营装备与金币。点名集火目标、执行团战战术，再决定推塔、控线或偷塔。</p><div class="intro-cta"><button class="major-button" data-action="start">开始随机匹配 <span>↗</span></button><span>4 轮团战 · 逐轮推进防御塔 · 单机可续玩</span></div></div><div class="intro-strip"><span><b>01</b> 随机英雄与队伍备选席</span><span><b>02</b> 三选一强化与装备合成</span><span><b>03</b> 团战胜负决定地图和经济</span></div></section><section class="intro-below"><article><span>英雄卡</span><h3>两张随机牌，先定你的角色</h3><p>未选英雄进入队伍备选席，可先换牌再锁定。英雄池随机抽样为本站规则。</p></article><article><span>构筑联动</span><h3>英雄、海克斯、装备互相成就</h3><p>战斗中列出触发的组合与来源，让每条路线有可追溯的影响。</p></article><article><span>战术博弈</span><h3>目标、交战与战后推进都由你选</h3><p>击杀、团战胜负、推塔和控线会改变下一轮的商店与战场。</p></article></section>`;
+  return `<section class="game-intro" style="--cover:url('${escapeHtml(splash)}')"><div class="intro-copy"><span class="tiny-label">AN INTERACTIVE 5V5 MAYHEM STORY</span><h1>一局海斗，<br><em>由你改写。</em></h1><p>从随机英雄卡开始，逐轮选择海克斯、经营装备与金币。点名集火目标、执行团战战术，再决定推塔、控线或偷塔。</p><div class="intro-cta"><button class="major-button" data-action="start">开始随机匹配 <span>↗</span></button><a class="outline-link" href="${escapeHtml(duelUrl)}">和朋友双人联机 ↗</a><span>4 轮团战 · 逐轮推进防御塔 · 单机可续玩</span></div></div><div class="intro-strip"><span><b>01</b> 随机英雄与队伍备选席</span><span><b>02</b> 三选一强化与装备合成</span><span><b>03</b> 团战胜负决定地图和经济</span></div></section><section class="intro-below"><article><span>英雄卡</span><h3>两张随机牌，先定你的角色</h3><p>未选英雄进入队伍备选席，可先换牌再锁定。英雄池随机抽样为本站规则。</p></article><article><span>构筑联动</span><h3>英雄、海克斯、装备互相成就</h3><p>战斗中列出触发的组合与来源，让每条路线有可追溯的影响。</p></article><article><span>战术博弈</span><h3>目标、交战与战后推进都由你选</h3><p>击杀、团战胜负、推塔和控线会改变下一轮的商店与战场。</p></article></section>`;
 }
 function heroDraft() {
   const offers = (game.heroOffers || []).map(hero).filter(Boolean);

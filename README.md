@@ -1,8 +1,10 @@
 # 海斗战记 · Mayhem Chronicles
 
-独立的 5v5 海克斯大乱斗互动文字游戏。打开网页即可开始一局，游戏逻辑在浏览器本地运行，进度会保存在当前浏览器。
+独立的 5v5 海克斯大乱斗互动文字游戏。单人模式在浏览器本地运行，进度会保存在当前浏览器；服务器版提供与朋友进入同一房间的联机对战。
 
 [在线游戏](https://xiaokai2810.github.io/haidou-zhanji/) · [原版构筑实验室](https://xiaokai2810.github.io/haidou-lunzhan/)
+
+联机版部署后从 `http://101.132.103.55/haidou-zhanji/duel.html` 进入；服务器的根页面和 GitHub Pages 页面仍提供单人模式。服务器安装与运维说明见 [deploy/README.md](deploy/README.md)。
 
 ## 玩法
 
