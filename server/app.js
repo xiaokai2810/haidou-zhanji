@@ -4,6 +4,7 @@ import { isIP } from 'node:net';
 import { readFile, stat } from 'node:fs/promises';
 import { dirname, extname, join, resolve, sep } from 'node:path';
 import { fileURLToPath } from 'node:url';
+import { createSquadRoom, joinSquadRoom, authorizeSquad, actSquadRoom, squadPacket } from './squad-rooms.js';
 import { RoomStore } from './store.js';
 import { actDuel, createDuel, joinDuel, viewDuel } from '../src/duel-engine.js';
 
@@ -101,7 +102,7 @@ async function staticFile(response, pathname, distDir) {
   response.writeHead(200, {
     'Content-Type': FILE_TYPES[extension] || 'application/octet-stream',
     'Content-Length': data.length,
-    'Cache-Control': extension === '.html' ? 'no-cache' : 'public, max-age=86400',
+    'Cache-Control': ['.html', '.json'].includes(extension) ? 'no-cache' : 'public, max-age=86400',
     'X-Content-Type-Options': 'nosniff',
     'Referrer-Policy': 'no-referrer',
   });
@@ -177,6 +178,35 @@ export async function createApp({
         response.writeHead(200, { ...headers, 'Content-Type': 'application/json; charset=utf-8', 'Content-Length': Buffer.byteLength(catalogBody) });
         response.end(catalogBody); return;
       }
+      if (path === '/api/squads' && request.method === 'POST') {
+        const body = await bodyJson(request);
+        const token = randomBytes(32).toString('hex');
+        const ip = clientIp(request);
+        const room = await store.create(code => createSquadRoom(code, body.name, token, db, now()), () => checkCreateQuota(ip), () => noteCreate(ip));
+        return json(response, 201, { ...squadPacket(room, '0'), token });
+      }
+      const squadMatch = /^\/api\/squads\/([^/]+)(?:\/(join|actions))?$/.exec(path);
+      if (squadMatch) {
+        const code = squadMatch[1].toUpperCase(), operation = squadMatch[2];
+        if (operation === 'join' && noteAccess(joinTimes, clientIp(request)) > maxJoinsPerIp) throw httpError(429, '加入房间尝试过于频繁，请稍后再试');
+        const room = CODE_PATTERN.test(code) && store.get(code);
+        if (!room || room.kind !== 'squad') throw httpError(404, '房间不存在或已过期');
+        if (operation === 'join') {
+          if (request.method !== 'POST') throw httpError(405, '仅支持 POST');
+          const body = await bodyJson(request), token = randomBytes(32).toString('hex');
+          const updated = await store.transact(code, current => joinSquadRoom(current, body, token, now()));
+          return json(response, 200, { ...squadPacket(updated, updated.members.at(-1).id), token });
+        }
+        const member = authorizeSquad(room, bearer(request));
+        if (operation === 'actions') {
+          if (request.method !== 'POST') throw httpError(405, '仅支持 POST');
+          const body = await bodyJson(request);
+          const updated = await store.transact(code, current => actSquadRoom(current, member.id, body, db, now()));
+          return json(response, 200, squadPacket(updated, member.id));
+        }
+        if (request.method !== 'GET') throw httpError(405, '仅支持 GET');
+        return json(response, 200, squadPacket(room, member.id));
+      }
       if (path === '/api/rooms' && request.method === 'POST') {
         const body = await bodyJson(request);
         const ip = clientIp(request);
@@ -194,7 +224,7 @@ export async function createApp({
         const operation = match[2];
         if (operation === 'join' && request.method === 'POST' && noteAccess(joinTimes, clientIp(request)) > maxJoinsPerIp) throw httpError(429, '加入房间尝试过于频繁，请稍后再试');
         const room = store.get(code);
-        if (!room) throw httpError(404, '房间不存在或已过期');
+        if (!room || room.kind === 'squad') throw httpError(404, '房间不存在或已过期');
         if (operation === 'join') {
           if (request.method !== 'POST') throw httpError(405, '仅支持 POST');
           const body = await bodyJson(request);

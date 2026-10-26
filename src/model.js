@@ -9,7 +9,7 @@ export const GROWTH = {
 const AUGMENT_EFFECTS = {
   draw_your_sword: { hpPct: .24, adPct: .24, asPct: .20, movePct: .20, lifesteal: .20, note: '近战转换及百分比属性；实际远程系数可能因英雄而异。' },
   blunt_force: { adPct: .20 },
-  witchful_thinking: { ap: 80, note: '20–80 法强按满级上限 80 计算；实际数值以当局阶段为准。' },
+  witchful_thinking: { apByLevel: [20, 80], note: '26.21 为随等级增长的 20–80 法强；文字模拟按 1–18 级线性折算。' },
   goliath: { hpPct: .35, adaptivePct: .15 },
   celestial_body: { hp: 1500, damagePct: -.10 },
   deft: { asPct: .60 },
@@ -78,8 +78,8 @@ export function computeBuild({ champion, level, augments, items, growth = {}, ta
   if (itemIds.has('126697')) flat.ad += growthValue('126697');
   if (itemIds.has('6657')) {
     const stacks = Math.min(10, growthValue('6657'));
-    flat.hp += stacks * 10; flat.mp += stacks * 20; flat.ap += stacks * 4;
-    notes.push('时光之杖按每层 10 生命值、20 法力值、4 法强估算；请以当期游戏内说明为准。');
+    flat.hp += stacks * 10; flat.mp += stacks * 30; flat.ap += stacks * 3;
+    notes.push('时光之杖按 26.21 每层 10 生命值、30 法力值、3 法强计算，最多 10 层；额外等级由战役阶段规则处理。');
   }
   if (itemIds.has('3042')) flat.ad += .02 * (base.mp + flat.mp);
   let hpPct = 0, adPct = 0, asPct = 0, movePct = 0, hasteFromAP = 0, damagePct = 0, adaptivePct = 0;
@@ -90,7 +90,9 @@ export function computeBuild({ champion, level, augments, items, growth = {}, ta
       modeledAugments++;
       hpPct += effect.hpPct || 0; adPct += effect.adPct || 0;
       asPct += effect.asPct || 0; movePct += effect.movePct || 0;
-      flat.ap += effect.ap || 0; flat.haste += effect.haste || 0;
+      flat.ap += effect.ap || 0;
+      if (effect.apByLevel) flat.ap += effect.apByLevel[0] + (effect.apByLevel[1] - effect.apByLevel[0]) * (lv - 1) / 17;
+      flat.haste += effect.haste || 0;
       flat.hp += effect.hp || 0;
       damagePct += effect.damagePct || 0; adaptivePct += effect.adaptivePct || 0;
       flat.lifesteal += (effect.lifesteal || 0) * 100;
@@ -125,7 +127,7 @@ export function computeBuild({ champion, level, augments, items, growth = {}, ta
     else result.ad *= 1 + adaptivePct;
   }
   if (itemIds.has('3089')) result.ap *= 1.30;
-  if (itemIds.has('2501')) result.ad += Math.max(0, result.hp - base.hp) * .02;
+  if (itemIds.has('2501')) result.ad += Math.max(0, result.hp - base.hp) * .025;
   if (itemIds.has('4633')) result.ap += Math.max(0, result.hp - base.hp) * .02;
   result.haste += result.ap * hasteFromAP;
   const effectiveArmor = Math.max(-50, targetArmor * (1 - result.armorPenPct / 100) - result.lethality);

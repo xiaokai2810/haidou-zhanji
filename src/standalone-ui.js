@@ -64,7 +64,7 @@ function progress() {
   return `<div class="run-progress" aria-label="游戏阶段">${steps.map(([id, label], index) => `<div class="${index === active ? 'active' : index < active ? 'done' : ''}"><b>${String(index + 1).padStart(2, '0')}</b><span>${label}</span></div>`).join('')}</div>`;
 }
 function topbar() {
-  return `<header class="game-header"><a class="game-brand" href="${import.meta.env.BASE_URL}"><i>M<span>✦</span></i><span><b>海斗战记</b><small>MAYHEM CHRONICLES</small></span></a><div class="game-header-right"><span class="patch-pill">● PATCH ${escapeHtml(db.meta.patch)}</span><a class="builder-link" href="${escapeHtml(duelUrl)}">双人联机 ↗</a><a class="builder-link" href="https://xiaokai2810.github.io/haidou-lunzhan/">构筑实验室 ↗</a>${game ? `<button class="reset-button ${ui.resetArmed ? 'armed' : ''}" data-action="reset">${ui.resetArmed ? '确认重开？' : '重新匹配'}</button>` : ''}</div></header>`;
+  return `<header class="game-header"><a class="game-brand" href="${import.meta.env.BASE_URL}"><i>M<span>✦</span></i><span><b>海斗战记</b><small>MAYHEM CHRONICLES</small></span></a><div class="game-header-right"><span class="patch-pill">● PATCH ${escapeHtml(db.meta.patch)}</span><a class="builder-link" href="${import.meta.env.BASE_URL}">七波 5v5 指挥模式 ↗</a><a class="builder-link" href="${escapeHtml(duelUrl)}">经典双人 ↗</a><a class="builder-link" href="https://xiaokai2810.github.io/haidou-lunzhan/">构筑实验室 ↗</a>${game ? `<button class="reset-button ${ui.resetArmed ? 'armed' : ''}" data-action="reset">${ui.resetArmed ? '确认重开？' : '重新匹配'}</button>` : ''}</div></header>`;
 }
 function intro() {
   const splash = lookup('champions', 'Yasuo')?.splash || '';

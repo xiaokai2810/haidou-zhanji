@@ -1,6 +1,6 @@
 # 云服务器部署
 
-本部署将游戏挂在现有站点的 `http://101.132.103.55/haidou-zhanji/`，双人入口为 `http://101.132.103.55/haidou-zhanji/duel.html`。服务器已有其他网站使用 80 端口，因此保留原有 Nginx `server` 块，只往其中加入 [`nginx-location.conf`](nginx-location.conf)。Node 服务仅监听 `127.0.0.1:3000`，由 Nginx 提供公网入口。房间资料写入 `/var/lib/haidou-zhanji/rooms`，与程序目录分开。
+本部署将游戏挂在现有站点的 `http://101.132.103.55/haidou-zhanji/`，七波战队入口为 `http://101.132.103.55/haidou-zhanji/squad.html`（首页同样可进入），经典双人入口保留在 `duel.html`。服务器已有其他网站使用 80 端口，因此保留原有 Nginx `server` 块，只往其中加入 [`nginx-location.conf`](nginx-location.conf)。Node 服务仅监听 `127.0.0.1:3000`，由 Nginx 提供公网入口。房间资料写入 `/var/lib/haidou-zhanji/rooms`，与程序目录分开。
 
 ## 首次安装
 
@@ -89,3 +89,9 @@ sudo systemctl start haidou-zhanji
 ```
 
 备份归档含房间信息，应仅供管理员读取。更新失败时，恢复上一个发布包并重启服务；备份资料只有在房间状态需要回退时才恢复。
+
+## 七波战队模式
+
+首页与 `squad.html` 共用战队指挥界面。GitHub Pages 提供本地一人控制五英雄的完整对局，联机按钮导航到云服务器。云服务器支持每队 1–5 名真人，总计最多十人；没有真人的红队可由房主选择人机填充。旧版与新版房间使用独立 API 路由，共享房间存储和创建额度，避免升级时丢失旧局。
+
+新版房间凭证同样只经 Authorization 请求头传递。新增文件 `server/squad-rooms.js`、`src/squad-engine.js` 必须随发布包上传。构建后同时检查 `dist/index.html`、`dist/squad.html`、`dist/classic.html` 和 `dist/duel.html`。
